@@ -1,0 +1,16 @@
+[package]
+name = "turboquant"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rand = "0.8"
+rand_distr = "0.4"
+
+[[bin]]
+name = "turboquant"
+path = "src/main.rs"
+
+[lib]
+name = "turboquant"
+path = "src/lib.rs"
