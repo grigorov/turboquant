@@ -1,6 +1,6 @@
 # TurboQuant — оптимальное векторное квантование
 
-Реализация алгоритма **TurboQuant** на Python.
+Реализации алгоритма **TurboQuant** на Python и Rust.
 Источник: [arxiv.org/html/2504.19874v1](https://arxiv.org/html/2504.19874v1)
 
 ---
@@ -21,6 +21,11 @@
 - [API](#api)
 - [Результаты демо](#результаты-демо)
 - [Структура кода](#структура-кода)
+- [Реализация на Rust](#реализация-на-rust)
+  - [Установка (Rust)](#установка-rust)
+  - [Использование (Rust)](#использование-rust)
+  - [API (Rust)](#api-rust)
+  - [Структура кода (Rust)](#структура-кода-rust)
 
 ---
 
@@ -345,4 +350,121 @@ turboquant.py
 │   ├── inner_product_estimate   #   несмещённая оценка ⟨y, x⟩
 │   └── bits_per_vector          #   размер сжатого вектора в битах
 └── _demo()                      # демо и замеры
+```
+
+---
+
+## Реализация на Rust
+
+Rust-реализация находится в директории `rust/` и представляет собой крейт-библиотеку `turboquant` с исполняемым бинарником для демо.
+
+Зависимости: `rand 0.8`, `rand_distr 0.4` — генерация случайных матриц поворота и QJL.
+
+### Установка (Rust)
+
+Требования: Rust 1.85+ (edition 2024), Cargo.
+
+```bash
+cd rust
+cargo build --release
+```
+
+Запустить демо:
+
+```bash
+cargo run --release
+```
+
+### Использование (Rust)
+
+#### MSE-квантование
+
+```rust
+use turboquant::TurboQuantMse;
+
+let d = 256;
+let b = 4;
+let q = TurboQuantMse::new(d, b, Some(42));
+
+// Кодирование одного вектора (плоский срез длиной d)
+let x: Vec<f64> = /* единичный вектор длиной d */;
+let idx: Vec<u16> = q.encode(&x);      // индексы центроидов
+let x_hat: Vec<f64> = q.decode(&idx);  // реконструированный вектор
+
+// Батч: плоский буфер n*d элементов
+let x_batch: Vec<f64> = /* n*d элементов */;
+let idx_batch = q.encode(&x_batch);    // Vec<u16> длиной n*d
+let x_hat_batch = q.decode(&idx_batch);
+```
+
+#### Несмещённая оценка скалярного произведения
+
+```rust
+use turboquant::TurboQuantProd;
+
+let q = TurboQuantProd::new(256, 4, Some(42));
+
+// Кодирование вектора базы
+let qv = q.encode(&x);  // QuantizedVec { mse_idx, qjl_signs, res_norm }
+
+// Оценка скалярного произведения с запросом y
+let ip_est: f64 = q.inner_product_estimate(&y, &qv);
+// E[ip_est] == ⟨y, x⟩
+
+// Декодирование (реконструкция вектора)
+let x_tilde: Vec<f64> = q.decode(&qv);
+
+println!("bits per vector: {}", q.bits_per_vector());
+```
+
+### API (Rust)
+
+#### `TurboQuantMse`
+
+| Метод | Описание |
+|---|---|
+| `TurboQuantMse::new(d, b, seed)` | Создаёт квантизатор: матрица поворота + кодебук Lloyd-Max |
+| `encode(x: &[f64]) -> Vec<u16>` | Плоский буфер векторов → индексы центроидов |
+| `decode(idx: &[u16]) -> Vec<f64>` | Индексы → реконструированные векторы |
+
+Параметры конструктора:
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `d` | `usize` | Размерность вектора |
+| `b` | `usize` | Бит на координату (1–16) |
+| `seed` | `Option<u64>` | Случайное зерно (`None` — не детерминировано) |
+
+#### `TurboQuantProd`
+
+| Метод | Описание |
+|---|---|
+| `TurboQuantProd::new(d, b, seed)` | Создаёт квантизатор: `TurboQuantMse(b-1)` + матрица QJL |
+| `encode(x: &[f64]) -> QuantizedVec` | Вектор → `{ mse_idx, qjl_signs, res_norm }` |
+| `decode(qv: &QuantizedVec) -> Vec<f64>` | Реконструкция вектора |
+| `inner_product_estimate(y, qv) -> f64` | Несмещённая оценка ⟨y, x⟩ |
+| `bits_per_vector() -> usize` | Размер сжатого вектора в битах |
+
+#### `Qjl`
+
+Вспомогательный тип, используется внутри `TurboQuantProd`.
+
+| Метод | Описание |
+|---|---|
+| `Qjl::new(d, seed)` | Инициализация проекционной матрицы S ∈ ℝ^{d×d} |
+| `encode(x) -> (Vec<i8>, f64)` | x → (знаки ±1, норма ‖x‖₂) |
+| `decode(signs, norm) -> Vec<f64>` | Несмещённая реконструкция |
+
+### Структура кода (Rust)
+
+```
+rust/
+├── Cargo.toml
+└── src/
+    ├── lib.rs          # публичный API: реэкспорт TurboQuantMse, TurboQuantProd, Qjl
+    ├── main.rs         # демо и замеры производительности
+    ├── lloyd.rs        # Lloyd-Max квантизатор (гауссовский и сферический варианты)
+    ├── mse.rs          # TurboQuantMse: поворот + кодебук, encode/decode
+    ├── qjl.rs          # Qjl: матрица S, sign-проекция, несмещённое декодирование
+    └── prod.rs         # TurboQuantProd: MSE + QJL остаток, оценка скалярных произведений
 ```
