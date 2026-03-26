@@ -11,6 +11,10 @@ rand_distr = "0.4"
 name = "turboquant"
 path = "src/main.rs"
 
+[[bin]]
+name = "fuzzer"
+path = "src/bin/fuzzer.rs"
+
 [lib]
 name = "turboquant"
 path = "src/lib.rs"
