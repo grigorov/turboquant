@@ -143,7 +143,7 @@ jobs:
 
       - name: Run demo (smoke test)
         working-directory: rust
-        run: cargo run -- --iters 1
+        run: cargo run --bin turboquant -- --iters 1
 
       - name: Build benchmarks (compile check)
         working-directory: rust
