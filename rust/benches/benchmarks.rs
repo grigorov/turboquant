@@ -3,7 +3,7 @@
 //! Run with: cargo bench
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use turboquant::{TurboQuantMse, TurboQuantProd};
+use turboquant_rs::{TurboQuantMse, TurboQuantProd};
 use rand::SeedableRng;
 use rand_distr::{Distribution, Normal};
 
