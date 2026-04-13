@@ -122,6 +122,7 @@ fn check_ip_variance(q: &TurboQuantProd, x_batch: &[f64], y: &[f64], n: usize, d
 }
 
 /// 5. Граничные случаи: корректная длина вывода, без паники.
+///
 /// b=8 вместо b=16 — Lloyd-Max для 65536 центроидов слишком медленный.
 fn check_edge_cases(d: usize, seed: u64) -> (bool, String) {
     let mut failures: Vec<String> = Vec::new();

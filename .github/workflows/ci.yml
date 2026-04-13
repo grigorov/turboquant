@@ -42,22 +42,30 @@ jobs:
 
       - name: Build Python package with maturin
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install maturin numpy scipy pytest hypothesis ruff
           maturin develop --release
 
       - name: Lint with ruff
         run: |
+          source .venv/bin/activate
           ruff check turboquant.py fuzzer.py tests/
 
       - name: Run unit tests
         run: |
+          source .venv/bin/activate
           pytest tests/ -v
 
       - name: Run fuzzer (5 iterations)
         run: |
+          source .venv/bin/activate
           python fuzzer.py --iters 5
 
       - name: Run benchmark (smoke test)
         run: |
+          source .venv/bin/activate
           python benchmark.py --d 64 --n 100 --bits 1 2 4
 
   # -------------------------------------------------------------- Python pure
