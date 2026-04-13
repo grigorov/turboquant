@@ -16,6 +16,7 @@ Usage:
 import argparse
 import math
 import sys
+
 import numpy as np
 
 from turboquant import TurboQuantMSE, TurboQuantProd
@@ -94,7 +95,8 @@ def check_edge_cases(d: int, seed: int) -> tuple[bool, str]:
     for b in [1, 8]:
         try:
             q = TurboQuantMSE(d, b, seed=seed)
-            x = np.zeros(d); x[0] = 1.0
+            x = np.zeros(d)
+            x[0] = 1.0
             x_hat = q.decode(q.encode(x))
             if x_hat.shape != (d,):
                 failures.append(f"MSE b={b}: wrong shape {x_hat.shape}")
@@ -104,7 +106,8 @@ def check_edge_cases(d: int, seed: int) -> tuple[bool, str]:
     # b=2 минимум для Prod
     try:
         q = TurboQuantProd(d, 2, seed=seed)
-        x = np.zeros(d); x[0] = 1.0
+        x = np.zeros(d)
+        x[0] = 1.0
         idx, signs, gamma = q.encode(x)
         if idx.shape != (d,):
             failures.append(f"Prod b=2: wrong idx shape {idx.shape}")

@@ -5,8 +5,8 @@ use std::time::Instant;
 use rand::SeedableRng;
 use rand_distr::{Distribution, Normal};
 
-use turboquant::{TurboQuantMse, TurboQuantProd};
-use turboquant::mse::normalize;
+use turboquant_rs::{TurboQuantMse, TurboQuantProd};
+use turboquant_rs::mse::normalize;
 
 fn randn_unit_batch(n: usize, d: usize, seed: u64) -> Vec<f64> {
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);

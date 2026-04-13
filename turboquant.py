@@ -33,12 +33,12 @@ Usage
 
 from __future__ import annotations
 
-import numpy as np
-from scipy.special import gamma as gamma_fn
-from scipy.integrate import quad
-from scipy.stats import norm as scipy_norm
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
+import numpy as np
+from scipy.integrate import quad
+from scipy.special import gamma as gamma_fn
+from scipy.stats import norm as scipy_norm
 
 # ---------------------------------------------------------------------------
 # Helper: Lloyd-Max quantizer for a 1-D distribution

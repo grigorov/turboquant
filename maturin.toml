@@ -1,0 +1,6 @@
+# Maturin configuration for TurboQuant Python bindings
+# This file can be used as an alternative to pyproject.toml configuration
+
+[module]
+name = "turboquant"
+manifest-path = "rust/Cargo.toml"

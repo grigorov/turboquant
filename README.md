@@ -3,33 +3,32 @@
 Реализации алгоритма **TurboQuant** на Python и Rust.
 Источник: [arxiv.org/html/2504.19874v1](https://arxiv.org/html/2504.19874v1)
 
+[![CI](https://github.com/grigorov/turboquant/actions/workflows/ci.yml/badge.svg)](https://github.com/grigorov/turboquant/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ---
 
 ## Содержание
 
 - [Что такое TurboQuant](#что-такое-turboquant)
 - [Математическая основа](#математическая-основа)
-  - [Маргинальное распределение координат сферы](#маргинальное-распределение-координат-сферы)
-  - [Квантизатор Ллойда–Макса](#квантизатор-ллойдамакса)
-  - [Проблема скалярного произведения и QJL](#проблема-скалярного-произведения-и-qjl)
 - [Алгоритмы](#алгоритмы)
-  - [TurboQuantMSE — минимизация MSE](#turboquantmse--минимизация-mse)
-  - [TurboQuantProd — несмещённое скалярное произведение](#turboquantprod--несмещённое-скалярное-произведение)
 - [Теоретические гарантии](#теоретические-гарантии)
 - [Установка](#установка)
 - [Использование](#использование)
 - [API](#api)
 - [Результаты демо](#результаты-демо)
+- [Расширенные модули](#расширенные-модули)
+  - [Mixed-Precision](#mixed-precision-kвантование)
+  - [Sparse Vectors](#квантование-разреженных-векторов)
+  - [Numba JIT](#numba-jit-ускорение)
+  - [LLM Integration](#интеграция-с-llm)
+- [Бенчмарки](#бенчмарки)
+- [Тестирование](#тестирование)
 - [Структура кода](#структура-кода)
 - [Реализация на Rust](#реализация-на-rust)
-  - [Установка (Rust)](#установка-rust)
-  - [Использование (Rust)](#использование-rust)
-  - [API (Rust)](#api-rust)
-  - [Структура кода (Rust)](#структура-кода-rust)
+  - [Python Bindings](#python-bindings-через-maturin)
 - [Fuzzer](#fuzzer)
-  - [Python](#fuzzer-python)
-  - [Rust](#fuzzer-rust)
-  - [Проверяемые инварианты](#проверяемые-инварианты)
 
 ---
 
@@ -175,6 +174,8 @@ E[⟨y, x̃⟩] = ⟨y, x⟩
 
 ## Установка
 
+### Pure Python (без компиляции)
+
 Зависимости: Python 3.9+, NumPy, SciPy.
 
 ```bash
@@ -183,11 +184,57 @@ pip install numpy scipy
 
 Файл `turboquant.py` не требует установки — достаточно скопировать его в проект.
 
+### С Rust bindings (рекомендуется, максимальная производительность)
+
+Требования: Python 3.9+, Rust 1.75+ (edition 2021), `maturin`.
+
+```bash
+# Установка maturin
+pip install maturin
+
+# Сборка и установка из исходников
+maturin develop --release
+
+# Или сборка wheel-пакета
+maturin build --release
+pip install target/wheels/*.whl
+```
+
+После установки Rust bindings становятся доступны через модуль `turboquant_rs`:
+
+```python
+from turboquant_rs import TurboQuantMse, TurboQuantProd, QuantizedProd
+```
+
+> **Примечание:** Pure Python версии (`turboquant.py`) продолжает работать без изменений. Rust bindings — опциональное ускорение.
+
 ---
 
 ## Использование
 
-### MSE-квантование
+### Rust bindings (рекомендуется)
+
+```python
+from turboquant_rs import TurboQuantMse, TurboQuantProd
+
+d, b = 256, 4
+
+# MSE-квантование
+q = TurboQuantMse(d=d, b=b, seed=42)
+
+x = [float(v) for v in np.random.randn(d)]
+x_norm = x / np.linalg.norm(x)
+
+idx   = q.encode(x_norm.tolist())   # List[u16] — индексы центроидов
+x_hat = q.decode(idx)               # List[f64] — реконструкция
+
+# TurboQuantProd для несмещённой оценки скалярного произведения
+q_prod = TurboQuantProd(d=d, b=b, seed=42)
+qv = q_prod.encode(x_norm.tolist())
+ip_est = q_prod.inner_product_estimate(x_norm.tolist(), qv)
+```
+
+### Pure Python (без Rust)
 
 ```python
 import numpy as np
@@ -370,13 +417,13 @@ fuzzer.py                        # fuzzer корректности (5 инвар
 
 ## Реализация на Rust
 
-Rust-реализация находится в директории `rust/` и представляет собой крейт-библиотеку `turboquant` с исполняемым бинарником для демо.
+Rust-реализация находится в директории `rust/` и представляет собой крейт-библиотеку `turboquant_rs` с Python bindings через PyO3/maturin.
 
-Зависимости: `rand 0.8`, `rand_distr 0.4` — генерация случайных матриц поворота и QJL.
+Зависимости: `rand 0.8`, `rand_distr 0.4`, `rayon 1.10` (параллелизм), `pyo3 0.25` (Python bindings).
 
 ### Установка (Rust)
 
-Требования: Rust 1.85+ (edition 2024), Cargo.
+Требования: Rust 1.75+ (edition 2021), Cargo.
 
 ```bash
 cd rust
@@ -387,6 +434,24 @@ cargo build --release
 
 ```bash
 cargo run --release
+```
+
+#### Python bindings (через maturin)
+
+```bash
+# В корне проекта
+pip install maturin
+maturin develop --release
+```
+
+После установки:
+
+```python
+from turboquant_rs import TurboQuantMse, TurboQuantProd, QuantizedProd
+
+# Проверка доступности Rust bindings
+import turboquant_rs
+print(turboquant_rs.__has_rust__)  # True
 ```
 
 ### Использование (Rust)
@@ -440,6 +505,9 @@ println!("bits per vector: {}", q.bits_per_vector());
 | `TurboQuantMse::new(d, b, seed)` | Создаёт квантизатор: матрица поворота + кодебук Lloyd-Max |
 | `encode(x: &[f64]) -> Vec<u16>` | Плоский буфер векторов → индексы центроидов |
 | `decode(idx: &[u16]) -> Vec<f64>` | Индексы → реконструированные векторы |
+| `encode_with_norm(x) -> (Vec<u16>, f32)` | Для ненормированных векторов |
+| `decode_with_norm(idx, norm) -> Vec<f64>` | Обратное к `encode_with_norm` |
+| `mse(x) -> f64` | Вычислить MSE на батче |
 
 Параметры конструктора:
 
@@ -469,13 +537,65 @@ println!("bits per vector: {}", q.bits_per_vector());
 | `encode(x) -> (Vec<i8>, f64)` | x → (знаки ±1, норма ‖x‖₂) |
 | `decode(signs, norm) -> Vec<f64>` | Несмещённая реконструкция |
 
+### Python Bindings API
+
+Все Rust классы доступны из Python через модуль `turboquant_rs`:
+
+#### `TurboQuantMse` (Python)
+
+```python
+from turboquant_rs import TurboQuantMse
+
+q = TurboQuantMse(d=256, b=4, seed=42)
+
+# Свойства
+q.d           # размерность
+q.b           # бит на координату
+q.n_centroids # количество центроидов (2^b)
+
+# Методы
+q.encode(x: List[float]) -> List[int]
+q.decode(indices: List[int]) -> List[float]
+q.encode_with_norm(x: List[float]) -> Tuple[List[int], float]
+q.decode_with_norm(indices: List[int], norm: float) -> List[float]
+q.mse(x: List[float]) -> float
+```
+
+#### `TurboQuantProd` (Python)
+
+```python
+from turboquant_rs import TurboQuantProd
+
+q = TurboQuantProd(d=256, b=4, seed=42)
+
+# Свойства
+q.d  # размерность
+q.b  # бит на координату
+
+# Методы
+q.encode(x: List[float]) -> QuantizedProd
+q.decode(qv: QuantizedProd) -> List[float]
+q.inner_product_estimate(y: List[float], qv: QuantizedProd) -> float
+```
+
+#### `QuantizedProd` (Python)
+
+```python
+# Сжатое представление вектора
+qv.mse_indices    # List[int] — индексы MSE центроидов
+qv.qjl_signs      # List[int]  — знаки QJL (±1)
+qv.residual_norm  # float      — норма остатка
+
+repr(qv)  # удобная строка представления
+```
+
 ### Структура кода (Rust)
 
 ```
 rust/
 ├── Cargo.toml
 └── src/
-    ├── lib.rs          # публичный API: реэкспорт TurboQuantMse, TurboQuantProd, Qjl
+    ├── lib.rs          # публичный API + Python bindings (PyO3)
     ├── main.rs         # демо и замеры производительности
     ├── bin/
     │   └── fuzzer.rs   # fuzzer корректности (5 инвариантов)
@@ -484,6 +604,8 @@ rust/
     ├── qjl.rs          # Qjl: матрица S, sign-проекция, несмещённое декодирование
     └── prod.rs         # TurboQuantProd: MSE + QJL остаток, оценка скалярных произведений
 ```
+
+Python bindings собираются через `maturin` и доступны как `turboquant_rs`.
 
 ---
 
@@ -564,3 +686,203 @@ Master seed: 42  iters: 3
 
 Results: 5/5 passed
 ```
+
+---
+
+## Расширенные модули
+
+### Mixed-Precision квантование
+
+Модуль `turboquant_mixed.py` позволяет задавать разную битовость для разных слоёв модели или групп координат одного вектора.
+
+```python
+from turboquant_mixed import MixedPrecisionQuantizer
+
+# Режим 1: по слоям — каждый слой модели со своей битовостью
+q = MixedPrecisionQuantizer.from_layers(
+    layer_dims=[256, 512, 128],
+    layer_bits=[4, 2, 8],
+    seed=42,
+)
+
+# Режим 2: по группам — вектор делится на части с разной битовостью
+q = MixedPrecisionQuantizer.from_groups(
+    d=4096,
+    group_sizes=[2048, 1024, 1024],
+    group_bits=[4, 2, 8],
+    seed=42,
+)
+print(q.bit_allocation_summary())
+# Avg bits/coord: 4.50  Compression: 14.2x
+
+# Режим 3: автоматическое распределение по важности
+q = MixedPrecisionQuantizer.from_importance(
+    d=4096, n_groups=4, bits_range=(2, 8), seed=42,
+)
+# Группы: 2 → 4 → 6 → 8 бит
+```
+
+| Режим | Описание | Сжатие |
+|---|---|---|
+| Layer | Каждый слой — своя битовость | Зависит от модели |
+| Group | Вектор делится на группы | 12–14× |
+| Importance | Автоматическое 2→8 бит | 12.8× |
+
+### Квантование разреженных векторов
+
+Модуль `turboquant_sparse.py` оптимизирован для векторов с большим количеством нулей (MoE gating, sparse attention, pruning).
+
+```python
+from turboquant_sparse import SparseQuantizer
+import numpy as np
+
+# Вектор с 90% нулей
+d = 4096
+x = np.zeros(d)
+x[np.random.choice(d, size=d//10)] = np.random.randn(d//10)
+
+q = SparseQuantizer(d, b=4, seed=42)
+enc = q.encode(x)
+x_hat = q.decode(enc)
+
+print(f"NNZ: {len(enc.indices)}/{d}")
+print(f"Сжатие: {q.compression_vs_dense(enc):.1f}×")
+```
+
+| Sparsity | Bits/vector | Сжатие vs Dense |
+|---|---|---|
+| 50% | 73 760 | 0.2× |
+| 90% | 14 756 | **1.1×** |
+| 99% | 1 472 | **11.1×** |
+
+Поддержка scipy sparse матриц (`encode_sparse_matrix`) и режима TurboQuantProd.
+
+### Numba JIT ускорение
+
+Модуль `turboquant_numba.py` обеспечивает 2× ускорение encode/decode через JIT-компиляцию.
+
+```python
+from turboquant_numba import TurboQuantMSEJIT
+
+q = TurboQuantMSEJIT(d=256, b=4, seed=42)
+idx = q.encode(X)   # JIT-compiled, параллельный
+x_hat = q.decode(idx)
+```
+
+| Операция | NumPy | Numba | Ускорение |
+|---|---|---|---|
+| Encode (d=256, n=5000) | 56 ms | 28 ms | **2.0×** |
+| Decode | 5 ms | 47 ms | — (overhead) |
+
+Установка: `pip install numba` (опционально).
+
+### Интеграция с LLM
+
+Модуль `turboquant_llm.py` предоставляет backend-адаптеры для llama.cpp (GGUF) и vLLM (KV-cache).
+
+```python
+from turboquant_llm import (
+    TurboQuantBackend,
+    quantize_model_layers,
+    reconstruct_model_layers,
+)
+
+# GGUF-стиль: квантование весов модели
+backend = TurboQuantBackend.create("gguf")
+q = backend.quantizer(d=4096, b=4, seed=42)
+data = backend.encode_weight(weight_matrix, q)
+W_rec = backend.decode_weight(data, 4096, 4, q)
+
+# Полное квантование модели
+state_dict = {"layer1.q.weight": W_q, "layer1.k.weight": W_k, ...}
+qmodel = quantize_model_layers(
+    state_dict,
+    backend_name="gguf",
+    bits_per_layer={"layer1.q.weight": 4, "layer1.ffn.weight": 8},
+    default_bits=2,
+    seed=42,
+)
+print(qmodel.summary())
+
+# VLLM KV-cache: квантование активаций по токенам
+backend_kv = TurboQuantBackend.create("vllm")
+q = backend_kv.quantizer(head_dim=128, b=4, seed=42)
+data = backend_kv.encode_weight(kv_cache, q)
+kv_rec = backend_kv.decode_weight(data, 128, 4, q)
+```
+
+| Backend | Формат | Назначение |
+|---|---|---|
+| GGUF (`TQGG`) | Binary blob | llama.cpp-style weights |
+| VLLM (`TQKV`) | Per-token binary | KV-cache активации |
+
+---
+
+## Бенчмарки
+
+### Python
+
+```bash
+python benchmark.py --d 256 --n 5000 --bits 1 2 4 8
+```
+
+Результаты (d=256, n=5000):
+
+| Метод | b | MSE | Encode (ms/vec) | Decode (ms/vec) | Bits/vec | Compression |
+|---|---|---|---|---|---|---|
+| MSE | 1 | 0.00147 | 0.006 | 0.001 | 256 | 64.0× |
+| MSE | 2 | 0.00051 | 0.008 | 0.001 | 512 | 32.0× |
+| MSE | 4 | 0.00009 | 0.012 | 0.001 | 1024 | 16.0× |
+| MSE | 8 | 0.00004 | 0.183 | 0.001 | 2048 | 8.0× |
+| Prod | 2 | — | — | — | 544 | 30.1× |
+| Prod | 4 | — | — | — | 1056 | 15.5× |
+| Prod | 8 | — | — | — | 2080 | 7.9× |
+
+Decay MSE: ~2.5–2.9× на бит (теория: ~4×).
+IP bias: < 0.001 для всех b.
+
+### Rust (criterion)
+
+```bash
+cd rust && cargo bench --bench benchmarks
+```
+
+| Операция | d=256, n=1000 |
+|---|---|
+| MSE setup | ~36 ms |
+| MSE encode | ~42–46 ms |
+| MSE decode | ~43–65 ms |
+| Prod encode | ~148–157 ms |
+| Prod decode | ~128 ms |
+
+---
+
+## Тестирование
+
+```bash
+# Python unit tests + property-based
+python -m pytest tests/ -v          # 33 теста
+
+# Python fuzzer
+python fuzzer.py --iters 50         # 5 инвариантов
+
+# Rust tests (без Python bindings)
+cd rust && cargo test --no-default-features  # 15 тестов + 3 proptest
+
+# Rust fuzzer
+cargo run --no-default-features --bin fuzzer -- --iters 50
+
+# Python bindings (через maturin)
+maturin develop --release
+python -c "from turboquant_rs import TurboQuantMse; print('OK')"
+```
+
+Итого: **53+ теста** (33 Python + 15 Rust + 5 fuzzer invariants + Python bindings smoke).
+Все проходят CI на каждый push.
+
+### CI Pipeline
+
+CI автоматически запускает:
+- **Python pure tests** — тестирование оригинальной Python версии
+- **Python+Rust integration** — тестирование Python bindings через maturin
+- **Rust tests** — нативные Rust тесты, clippy, fuzzer

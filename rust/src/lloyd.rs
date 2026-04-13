@@ -330,4 +330,44 @@ mod tests {
         let expected = 1.959964;  // ~1.96 (стандартное нормальное)
         assert!((v - expected).abs() < 1e-4, "probit(0.975) = {v}");
     }
+
+    // -----------------------------------------------------------------------
+    // Proptest
+    // -----------------------------------------------------------------------
+
+    #[cfg(test)]
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn prop_lloyd_centroids_sorted(n in 2usize..32, sigma in 0.1f64..5.0) {
+                let c = lloyd_max_gaussian(n, sigma);
+                assert_eq!(c.len(), n);
+                for i in 1..n {
+                    prop_assert!(c[i] > c[i-1], "центроиды не отсортированы");
+                }
+            }
+
+            #[test]
+            fn prop_lloyd_symmetry(n in 2usize..16) {
+                let c = lloyd_max_gaussian(n, 1.0);
+                // Симметрия относительно нуля: c[i] ≈ -c[n-1-i]
+                for i in 0..n/2 {
+                    let diff = (c[i] + c[n - 1 - i]).abs();
+                    prop_assert!(diff < 1e-6, "нарушена симметрия: c[{i}]={}", c[i]);
+                }
+            }
+
+            #[test]
+            fn prop_sphere_centroids_in_bounds(n in 2usize..16, d in 4usize..200) {
+                let c = lloyd_max_sphere(n, d);
+                assert_eq!(c.len(), n);
+                for &v in &c {
+                    prop_assert!((-1.0..=1.0).contains(&v), "центроид вне [-1,1]: {v}");
+                }
+            }
+        }
+    }
 }

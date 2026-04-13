@@ -1,0 +1,71 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # ------------------------------------------------------------------ PyPI (with Rust extension)
+  publish-pypi:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # trusted publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/turboquant
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install maturin
+        run: |
+          python -m pip install --upgrade pip
+          pip install maturin
+
+      - name: Build package with maturin
+        run: maturin build --release --out dist
+
+      - name: Check package
+        run: |
+          pip install twine
+          twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ------------------------------------------------------------------ Crates.io
+  publish-crates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Login to crates.io
+        run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
+        working-directory: rust
+
+      - name: Publish to crates.io
+        run: cargo publish
+        working-directory: rust

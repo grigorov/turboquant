@@ -8,6 +8,7 @@
 
 use rand::SeedableRng;
 use rand_distr::{Distribution, Normal};
+use rayon::prelude::*;
 
 use crate::lloyd::lloyd_max_sphere;
 
@@ -105,8 +106,8 @@ fn matvec_t(a: &[f64], x: &[f64], m: usize, n: usize) -> Vec<f64> {
 ///
 /// # Пример
 /// ```
-/// use turboquant::TurboQuantMse;
-/// use turboquant::mse::normalize;
+/// use turboquant_rs::TurboQuantMse;
+/// use turboquant_rs::mse::normalize;
 ///
 /// let q = TurboQuantMse::new(64, 4, Some(42));
 /// let x: Vec<f64> = (0..64).map(|i| i as f64).collect();
@@ -227,8 +228,47 @@ impl TurboQuantMse {
     }
 
     // ------------------------------------------------------------------
+    // Батчевые версии
+    // ------------------------------------------------------------------
+
+    /// Кодирует батч из n векторов (row-major, длина n*d).
+    pub fn encode_batch(&self, x: &[f64]) -> Vec<u16> {
+        assert_eq!(x.len() % self.d, 0, "длина x должна делиться на d");
+        let n = x.len() / self.d;
+        (0..n)
+            .into_par_iter()
+            .flat_map(|i| self.encode_one(&x[i * self.d..(i + 1) * self.d]))
+            .collect()
+    }
+
+    /// Декодирует батч индексов (длина n*d).
+    pub fn decode_batch(&self, indices: &[u16]) -> Vec<f64> {
+        assert_eq!(indices.len() % self.d, 0);
+        let n = indices.len() / self.d;
+        (0..n)
+            .into_par_iter()
+            .flat_map(|i| self.decode_one(&indices[i * self.d..(i + 1) * self.d]))
+            .collect()
+    }
+
+    // ------------------------------------------------------------------
     // Внутренние вспомогательные методы
     // ------------------------------------------------------------------
+
+    /// Кодирование одного вектора.
+    #[inline]
+    fn encode_one(&self, x: &[f64]) -> Vec<u16> {
+        assert_eq!(x.len(), self.d);
+        let y = matvec(&self.rotation, x, self.d, self.d);
+        y.iter().map(|&yj| self.nearest_centroid(yj) as u16).collect()
+    }
+
+    /// Декодирование одного вектора.
+    #[inline]
+    fn decode_one(&self, indices: &[u16]) -> Vec<f64> {
+        let y_hat: Vec<f64> = indices.iter().map(|&k| self.centroids[k as usize]).collect();
+        matvec_t(&self.rotation, &y_hat, self.d, self.d)
+    }
 
     /// Бинарный поиск ближайшего центроида для значения y.
     #[inline]

@@ -1,11 +1,19 @@
 [package]
 name = "turboquant"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "Near-Optimal Vector Quantization for LLM Inference"
+readme = "../README.md"
+license = "MIT"
+repository = "https://github.com/grigorov/turboquant"
+homepage = "https://github.com/grigorov/turboquant"
+keywords = ["quantization", "vector-quantization", "llm", "compression", "simd"]
+categories = ["algorithms", "compression", "science"]
 
-[dependencies]
-rand = "0.8"
-rand_distr = "0.4"
+[lib]
+name = "turboquant_rs"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "turboquant"
@@ -15,6 +23,22 @@ path = "src/main.rs"
 name = "fuzzer"
 path = "src/bin/fuzzer.rs"
 
-[lib]
-name = "turboquant"
-path = "src/lib.rs"
+[[bench]]
+name = "benchmarks"
+harness = false
+
+[dependencies]
+rand = "0.8"
+rand_distr = "0.4"
+rayon = "1.10"
+
+[dependencies.pyo3]
+version = "0.25"
+
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
+
+[dev-dependencies]
+proptest = "1.4"
+criterion = "0.5"

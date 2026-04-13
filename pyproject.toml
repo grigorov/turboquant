@@ -1,0 +1,68 @@
+[project]
+name = "turboquant"
+version = "0.1.0"
+description = "Near-Optimal Vector Quantization for LLM Inference"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "TurboQuant Contributors"},
+]
+keywords = ["quantization", "vector-quantization", "llm", "compression", "k-means", "lloyd-max"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.21",
+    "scipy>=1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "hypothesis>=6.0",
+    "ruff>=0.1",
+]
+jit = [
+    "numba>=0.57",
+]
+
+[project.urls]
+Homepage = "https://github.com/grigorov/turboquant"
+Repository = "https://github.com/grigorov/turboquant"
+Documentation = "https://github.com/grigorov/turboquant#readme"
+"Bug Tracker" = "https://github.com/grigorov/turboquant/issues"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+binding = "pyo3"
+manifest-path = "rust/Cargo.toml"
+module-name = "turboquant_rs"
+python-source = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",   # line length (handled by formatter)
+]

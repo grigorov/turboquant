@@ -14,6 +14,7 @@
 //!   x̃ = x̂_mse + (√(π/2)/d) · γ · Sᵀ · z
 
 use rand::{Rng, SeedableRng};
+use rayon::prelude::*;
 
 use crate::mse::TurboQuantMse;
 use crate::qjl::Qjl;
@@ -105,13 +106,16 @@ impl TurboQuantProd {
         assert_eq!(x.len() % self.d, 0);
         let n = x.len() / self.d;
         (0..n)
+            .into_par_iter()
             .map(|i| self.encode(&x[i * self.d..(i + 1) * self.d]))
             .collect()
     }
 
     /// Декодирует батч.
     pub fn decode_batch(&self, qs: &[QuantizedProd]) -> Vec<f64> {
-        qs.iter().flat_map(|q| self.decode(q)).collect()
+        qs.par_iter()
+            .flat_map(|q| self.decode(q))
+            .collect()
     }
 
     // ------------------------------------------------------------------

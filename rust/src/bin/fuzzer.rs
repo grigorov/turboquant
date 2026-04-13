@@ -17,7 +17,7 @@ use std::process;
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 
-use turboquant::{TurboQuantMse, TurboQuantProd};
+use turboquant_rs::{TurboQuantMse, TurboQuantProd};
 
 const D_CHOICES: &[usize] = &[4, 8, 16, 32, 64, 128, 256];
 

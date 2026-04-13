@@ -3,33 +3,32 @@
 Python and Rust implementations of the **TurboQuant** algorithm.
 Source: [arxiv.org/html/2504.19874v1](https://arxiv.org/html/2504.19874v1)
 
+[![CI](https://github.com/grigorov/turboquant/actions/workflows/ci.yml/badge.svg)](https://github.com/grigorov/turboquant/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ---
 
 ## Table of Contents
 
 - [What is TurboQuant](#what-is-turboquant)
 - [Mathematical Background](#mathematical-background)
-  - [Marginal Distribution of Sphere Coordinates](#marginal-distribution-of-sphere-coordinates)
-  - [Lloyd-Max Quantizer](#lloyd-max-quantizer)
-  - [Inner Product Problem and QJL](#inner-product-problem-and-qjl)
 - [Algorithms](#algorithms)
-  - [TurboQuantMSE — MSE Minimization](#turboquantmse--mse-minimization)
-  - [TurboQuantProd — Unbiased Inner Product](#turboquantprod--unbiased-inner-product)
 - [Theoretical Guarantees](#theoretical-guarantees)
 - [Installation](#installation)
 - [Usage](#usage)
 - [API](#api)
 - [Demo Results](#demo-results)
+- [Advanced Modules](#advanced-modules)
+  - [Mixed-Precision](#mixed-precision-quantization)
+  - [Sparse Vectors](#sparse-vector-quantization)
+  - [Numba JIT](#numba-jit-acceleration)
+  - [LLM Integration](#llm-integration)
+- [Benchmarks](#benchmarks)
+- [Testing](#testing)
 - [Code Structure](#code-structure)
 - [Rust Implementation](#rust-implementation)
-  - [Installation (Rust)](#installation-rust)
-  - [Usage (Rust)](#usage-rust)
-  - [API (Rust)](#api-rust)
-  - [Code Structure (Rust)](#code-structure-rust)
+  - [Python Bindings](#python-bindings-via-maturin)
 - [Fuzzer](#fuzzer)
-  - [Python](#fuzzer-python)
-  - [Rust](#fuzzer-rust)
-  - [Checked Invariants](#checked-invariants)
 
 ---
 
@@ -175,6 +174,8 @@ E[⟨y, x̃⟩] = ⟨y, x⟩
 
 ## Installation
 
+### Pure Python (no compilation)
+
 Requirements: Python 3.9+, NumPy, SciPy.
 
 ```bash
@@ -183,11 +184,57 @@ pip install numpy scipy
 
 The file `turboquant.py` requires no installation — just copy it into your project.
 
+### With Rust bindings (recommended, maximum performance)
+
+Requirements: Python 3.9+, Rust 1.75+ (edition 2021), `maturin`.
+
+```bash
+# Install maturin
+pip install maturin
+
+# Build and install from source
+maturin develop --release
+
+# Or build a wheel package
+maturin build --release
+pip install target/wheels/*.whl
+```
+
+After installation, Rust bindings are available via the `turboquant_rs` module:
+
+```python
+from turboquant_rs import TurboQuantMse, TurboQuantProd, QuantizedProd
+```
+
+> **Note:** The pure Python version (`turboquant.py`) continues to work unchanged. Rust bindings are an optional acceleration layer.
+
 ---
 
 ## Usage
 
-### MSE Quantization
+### Rust bindings (recommended)
+
+```python
+from turboquant_rs import TurboQuantMse, TurboQuantProd
+
+d, b = 256, 4
+
+# MSE quantization
+q = TurboQuantMse(d=d, b=b, seed=42)
+
+x = [float(v) for v in np.random.randn(d)]
+x_norm = x / np.linalg.norm(x)
+
+idx   = q.encode(x_norm.tolist())   # List[u16] — centroid indices
+x_hat = q.decode(idx)               # List[f64] — reconstruction
+
+# TurboQuantProd for unbiased inner product estimation
+q_prod = TurboQuantProd(d=d, b=b, seed=42)
+qv = q_prod.encode(x_norm.tolist())
+ip_est = q_prod.inner_product_estimate(x_norm.tolist(), qv)
+```
+
+### Pure Python (without Rust)
 
 ```python
 import numpy as np
@@ -370,13 +417,13 @@ fuzzer.py                        # correctness fuzzer (5 invariants)
 
 ## Rust Implementation
 
-The Rust implementation lives in the `rust/` directory as a `turboquant` library crate with an executable binary for the demo.
+The Rust implementation lives in the `rust/` directory as a `turboquant_rs` library crate with Python bindings via PyO3/maturin.
 
-Dependencies: `rand 0.8`, `rand_distr 0.4` — for generating random rotation and QJL matrices.
+Dependencies: `rand 0.8`, `rand_distr 0.4`, `rayon 1.10` (parallelism), `pyo3 0.25` (Python bindings).
 
 ### Installation (Rust)
 
-Requirements: Rust 1.85+ (edition 2024), Cargo.
+Requirements: Rust 1.75+ (edition 2021), Cargo.
 
 ```bash
 cd rust
@@ -387,6 +434,24 @@ Run the demo:
 
 ```bash
 cargo run --release
+```
+
+#### Python bindings (via maturin)
+
+```bash
+# In project root
+pip install maturin
+maturin develop --release
+```
+
+After installation:
+
+```python
+from turboquant_rs import TurboQuantMse, TurboQuantProd, QuantizedProd
+
+# Check Rust bindings availability
+import turboquant_rs
+print(turboquant_rs.__has_rust__)  # True
 ```
 
 ### Usage (Rust)
@@ -440,6 +505,9 @@ println!("bits per vector: {}", q.bits_per_vector());
 | `TurboQuantMse::new(d, b, seed)` | Create quantizer: rotation matrix + Lloyd-Max codebook |
 | `encode(x: &[f64]) -> Vec<u16>` | Flat vector buffer → centroid indices |
 | `decode(idx: &[u16]) -> Vec<f64>` | Indices → reconstructed vectors |
+| `encode_with_norm(x) -> (Vec<u16>, f32)` | For non-unit vectors |
+| `decode_with_norm(idx, norm) -> Vec<f64>` | Inverse of `encode_with_norm` |
+| `mse(x) -> f64` | Compute MSE on a batch |
 
 Constructor parameters:
 
@@ -469,13 +537,65 @@ Helper type used internally by `TurboQuantProd`.
 | `encode(x) -> (Vec<i8>, f64)` | x → (±1 signs, norm ‖x‖₂) |
 | `decode(signs, norm) -> Vec<f64>` | Unbiased reconstruction |
 
+### Python Bindings API
+
+All Rust classes are available from Python via the `turboquant_rs` module:
+
+#### `TurboQuantMse` (Python)
+
+```python
+from turboquant_rs import TurboQuantMse
+
+q = TurboQuantMse(d=256, b=4, seed=42)
+
+# Properties
+q.d           # dimension
+q.b           # bits per coordinate
+q.n_centroids # number of centroids (2^b)
+
+# Methods
+q.encode(x: List[float]) -> List[int]
+q.decode(indices: List[int]) -> List[float]
+q.encode_with_norm(x: List[float]) -> Tuple[List[int], float]
+q.decode_with_norm(indices: List[int], norm: float) -> List[float]
+q.mse(x: List[float]) -> float
+```
+
+#### `TurboQuantProd` (Python)
+
+```python
+from turboquant_rs import TurboQuantProd
+
+q = TurboQuantProd(d=256, b=4, seed=42)
+
+# Properties
+q.d  # dimension
+q.b  # bits per coordinate
+
+# Methods
+q.encode(x: List[float]) -> QuantizedProd
+q.decode(qv: QuantizedProd) -> List[float]
+q.inner_product_estimate(y: List[float], qv: QuantizedProd) -> float
+```
+
+#### `QuantizedProd` (Python)
+
+```python
+# Compressed vector representation
+qv.mse_indices    # List[int] — MSE centroid indices
+qv.qjl_signs      # List[int]  — QJL signs (±1)
+qv.residual_norm  # float      — residual norm
+
+repr(qv)  # human-readable string
+```
+
 ### Code Structure (Rust)
 
 ```
 rust/
 ├── Cargo.toml
 └── src/
-    ├── lib.rs          # public API: re-exports TurboQuantMse, TurboQuantProd, Qjl
+    ├── lib.rs          # public API + Python bindings (PyO3)
     ├── main.rs         # demo and performance benchmarks
     ├── bin/
     │   └── fuzzer.rs   # correctness fuzzer (5 invariants)
@@ -484,6 +604,8 @@ rust/
     ├── qjl.rs          # Qjl: matrix S, sign projection, unbiased decoding
     └── prod.rs         # TurboQuantProd: MSE + QJL residual, IP estimation
 ```
+
+Python bindings are built via `maturin` and available as `turboquant_rs`.
 
 ---
 
@@ -564,3 +686,203 @@ Master seed: 42  iters: 3
 
 Results: 5/5 passed
 ```
+
+---
+
+## Advanced Modules
+
+### Mixed-Precision Quantization
+
+The `turboquant_mixed.py` module allows assigning different bit-widths to different model layers or coordinate groups within a single vector.
+
+```python
+from turboquant_mixed import MixedPrecisionQuantizer
+
+# Mode 1: per-layer — each model layer gets its own bit-width
+q = MixedPrecisionQuantizer.from_layers(
+    layer_dims=[256, 512, 128],
+    layer_bits=[4, 2, 8],
+    seed=42,
+)
+
+# Mode 2: per-group — a vector is split into parts with different bit-widths
+q = MixedPrecisionQuantizer.from_groups(
+    d=4096,
+    group_sizes=[2048, 1024, 1024],
+    group_bits=[4, 2, 8],
+    seed=42,
+)
+print(q.bit_allocation_summary())
+# Avg bits/coord: 4.50  Compression: 14.2x
+
+# Mode 3: automatic importance-based allocation
+q = MixedPrecisionQuantizer.from_importance(
+    d=4096, n_groups=4, bits_range=(2, 8), seed=42,
+)
+# Groups: 2 → 4 → 6 → 8 bits
+```
+
+| Mode | Description | Compression |
+|---|---|---|
+| Layer | Each layer gets its own bit-width | Depends on model |
+| Group | Vector split into groups | 12–14× |
+| Importance | Automatic 2→8 bit ramp | 12.8× |
+
+### Sparse Vector Quantization
+
+The `turboquant_sparse.py` module is optimized for vectors with many zeros (MoE gating, sparse attention, pruning).
+
+```python
+from turboquant_sparse import SparseQuantizer
+import numpy as np
+
+# Vector with 90% zeros
+d = 4096
+x = np.zeros(d)
+x[np.random.choice(d, size=d//10)] = np.random.randn(d//10)
+
+q = SparseQuantizer(d, b=4, seed=42)
+enc = q.encode(x)
+x_hat = q.decode(enc)
+
+print(f"NNZ: {len(enc.indices)}/{d}")
+print(f"Compression: {q.compression_vs_dense(enc):.1f}×")
+```
+
+| Sparsity | Bits/vector | Compression vs Dense |
+|---|---|---|
+| 50% | 73 760 | 0.2× |
+| 90% | 14 756 | **1.1×** |
+| 99% | 1 472 | **11.1×** |
+
+Supports scipy sparse matrices (`encode_sparse_matrix`) and TurboQuantProd mode.
+
+### Numba JIT Acceleration
+
+The `turboquant_numba.py` module provides 2× speedup for encode/decode via JIT compilation.
+
+```python
+from turboquant_numba import TurboQuantMSEJIT
+
+q = TurboQuantMSEJIT(d=256, b=4, seed=42)
+idx = q.encode(X)   # JIT-compiled, parallel
+x_hat = q.decode(idx)
+```
+
+| Operation | NumPy | Numba | Speedup |
+|---|---|---|---|
+| Encode (d=256, n=5000) | 56 ms | 28 ms | **2.0×** |
+| Decode | 5 ms | 47 ms | — (overhead) |
+
+Install: `pip install numba` (optional).
+
+### LLM Integration
+
+The `turboquant_llm.py` module provides backend adapters for llama.cpp (GGUF) and vLLM (KV-cache).
+
+```python
+from turboquant_llm import (
+    TurboQuantBackend,
+    quantize_model_layers,
+    reconstruct_model_layers,
+)
+
+# GGUF-style: model weight quantization
+backend = TurboQuantBackend.create("gguf")
+q = backend.quantizer(d=4096, b=4, seed=42)
+data = backend.encode_weight(weight_matrix, q)
+W_rec = backend.decode_weight(data, 4096, 4, q)
+
+# Full model quantization
+state_dict = {"layer1.q.weight": W_q, "layer1.k.weight": W_k, ...}
+qmodel = quantize_model_layers(
+    state_dict,
+    backend_name="gguf",
+    bits_per_layer={"layer1.q.weight": 4, "layer1.ffn.weight": 8},
+    default_bits=2,
+    seed=42,
+)
+print(qmodel.summary())
+
+# VLLM KV-cache: per-token activation quantization
+backend_kv = TurboQuantBackend.create("vllm")
+q = backend_kv.quantizer(head_dim=128, b=4, seed=42)
+data = backend_kv.encode_weight(kv_cache, q)
+kv_rec = backend_kv.decode_weight(data, 128, 4, q)
+```
+
+| Backend | Format | Purpose |
+|---|---|---|
+| GGUF (`TQGG`) | Binary blob | llama.cpp-style weights |
+| VLLM (`TQKV`) | Per-token binary | KV-cache activations |
+
+---
+
+## Benchmarks
+
+### Python
+
+```bash
+python benchmark.py --d 256 --n 5000 --bits 1 2 4 8
+```
+
+Results (d=256, n=5000):
+
+| Method | b | MSE | Encode (ms/vec) | Decode (ms/vec) | Bits/vec | Compression |
+|---|---|---|---|---|---|---|
+| MSE | 1 | 0.00147 | 0.006 | 0.001 | 256 | 64.0× |
+| MSE | 2 | 0.00051 | 0.008 | 0.001 | 512 | 32.0× |
+| MSE | 4 | 0.00009 | 0.012 | 0.001 | 1024 | 16.0× |
+| MSE | 8 | 0.00004 | 0.183 | 0.001 | 2048 | 8.0× |
+| Prod | 2 | — | — | — | 544 | 30.1× |
+| Prod | 4 | — | — | — | 1056 | 15.5× |
+| Prod | 8 | — | — | — | 2080 | 7.9× |
+
+MSE decay: ~2.5–2.9× per bit (theory: ~4×).
+IP bias: < 0.001 for all b.
+
+### Rust (criterion)
+
+```bash
+cd rust && cargo bench --bench benchmarks
+```
+
+| Operation | d=256, n=1000 |
+|---|---|
+| MSE setup | ~36 ms |
+| MSE encode | ~42–46 ms |
+| MSE decode | ~43–65 ms |
+| Prod encode | ~148–157 ms |
+| Prod decode | ~128 ms |
+
+---
+
+## Testing
+
+```bash
+# Python unit tests + property-based
+python -m pytest tests/ -v          # 33 tests
+
+# Python fuzzer
+python fuzzer.py --iters 50         # 5 invariants
+
+# Rust tests (without Python bindings)
+cd rust && cargo test --no-default-features  # 15 tests + 3 proptest
+
+# Rust fuzzer
+cargo run --no-default-features --bin fuzzer -- --iters 50
+
+# Python bindings (via maturin)
+maturin develop --release
+python -c "from turboquant_rs import TurboQuantMse; print('OK')"
+```
+
+Total: **53+ tests** (33 Python + 15 Rust + 5 fuzzer invariants + Python bindings smoke).
+All pass CI on every push.
+
+### CI Pipeline
+
+CI automatically runs:
+- **Python pure tests** — testing the original Python version
+- **Python+Rust integration** — testing Python bindings via maturin
+- **Rust tests** — native Rust tests, clippy, fuzzer
