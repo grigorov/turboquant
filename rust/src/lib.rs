@@ -46,7 +46,7 @@ impl PyTurboQuantMse {
     /// Encode a list of f64 values (length must be multiple of d).
     /// Returns list of u16 indices.
     fn encode(&self, x: Vec<f64>) -> PyResult<Vec<u16>> {
-        if x.len() % self.inner.d != 0 {
+        if !x.len().is_multiple_of(self.inner.d) {
             return Err(PyValueError::new_err("length of x must be divisible by d"));
         }
         Ok(self.inner.encode(&x))
@@ -54,7 +54,7 @@ impl PyTurboQuantMse {
 
     /// Decode a list of u16 indices back to f64 values.
     fn decode(&self, indices: Vec<u16>) -> PyResult<Vec<f64>> {
-        if indices.len() % self.inner.d != 0 {
+        if !indices.len().is_multiple_of(self.inner.d) {
             return Err(PyValueError::new_err("length of indices must be divisible by d"));
         }
         Ok(self.inner.decode(&indices))
@@ -62,7 +62,7 @@ impl PyTurboQuantMse {
 
     /// Encode with norm preservation. Returns (indices, norm).
     fn encode_with_norm(&self, x: Vec<f64>) -> PyResult<(Vec<u16>, f32)> {
-        if x.len() % self.inner.d != 0 {
+        if !x.len().is_multiple_of(self.inner.d) {
             return Err(PyValueError::new_err("length of x must be divisible by d"));
         }
         let n = x.len() / self.inner.d;
@@ -85,7 +85,7 @@ impl PyTurboQuantMse {
 
     /// Decode with norm preservation.
     fn decode_with_norm(&self, indices: Vec<u16>, norm: f32) -> PyResult<Vec<f64>> {
-        if indices.len() % self.inner.d != 0 {
+        if !indices.len().is_multiple_of(self.inner.d) {
             return Err(PyValueError::new_err("length of indices must be divisible by d"));
         }
         Ok(self.inner.decode_with_norm(&indices, norm))
@@ -93,7 +93,7 @@ impl PyTurboQuantMse {
 
     /// Calculate MSE on a batch of unit vectors.
     fn mse(&self, x: Vec<f64>) -> PyResult<f64> {
-        if x.len() % self.inner.d != 0 {
+        if !x.len().is_multiple_of(self.inner.d) {
             return Err(PyValueError::new_err("length of x must be divisible by d"));
         }
         Ok(self.inner.mse(&x))
